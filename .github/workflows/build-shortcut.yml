@@ -1,0 +1,52 @@
+name: Build & Sign Shortcut
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gen_shortcut.py"
+      - ".github/workflows/build-shortcut.yml"
+  workflow_dispatch:        # 支持手动触发
+
+jobs:
+  build:
+    runs-on: macos-latest   # 关键：签名必须 macOS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate unsigned shortcut
+        run: |
+          python gen_shortcut.py
+          ls -l distance.shortcut
+          file distance.shortcut
+
+      - name: Sign shortcut
+        run: |
+          shortcuts sign -m anyone -i distance.shortcut -o distance-signed.shortcut
+          ls -l distance-signed.shortcut
+          file distance-signed.shortcut
+
+      - name: Verify signature header
+        run: |
+          # 签名后文件头应为 AEA1
+          head -c 4 distance-signed.shortcut | xxd
+          if [ "$(head -c 4 distance-signed.shortcut)" != "AEA1" ]; then
+            echo "::error::签名失败，文件头不是 AEA1"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shortcut-${{ github.sha }}
+          path: |
+            distance.shortcut
+            distance-signed.shortcut
+          retention-days: 30
